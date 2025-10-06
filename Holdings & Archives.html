@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shah & Ahad Capital – Holdings & Archives</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .container { max-width: 980px; margin: auto; padding-bottom: 60px; }
+    h1 { color: #00ffc8; text-align: center; margin: 18px 0 6px; }
+    h2 { color: #00ffc8; margin: 26px 0 10px; text-align: left; }
+    .sub { color:#94a3b8; text-align:center; margin:0 0 20px }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; box-shadow: 0 4px 12px rgba(0,255,200,0.12); overflow: hidden; border-radius: 10px; }
+    thead { background: #0a192f; }
+    th, td { padding: 12px; border-bottom: 1px solid #2a374a; text-align: center; background-color: #111c2e; }
+    th { color:#00ffc8; }
+    tbody tr:nth-child(odd) td { background:#0f1624; }
+    .profit { color:#4ade80; font-weight:700; }
+    .loss   { color:#f87171; font-weight:700; }
+    .input-group { margin-top: 20px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+    .input-group input, .input-group button { padding:10px; border-radius:8px; border:none; font-size:1em; }
+    .input-group input { width: 180px; background:#1f2a40; color:#cbd5e1; }
+    .input-group button { background:#00ffc8; color:#111c2e; font-weight:800; cursor:pointer; }
+    .input-group button:hover { background:#14ffdf; }
+    #loginSection { text-align:center; margin: 12px 0 18px; }
+    #loginSection input { margin:4px; padding:10px; border-radius:8px; border:none; width:200px; background:#1f2a40; color:#cbd5e1; }
+    #loginSection button { padding:10px 16px; border:none; border-radius:8px; background:#00ffc8; color:#111c2e; font-weight:800; cursor:pointer; }
+    #logoutBtn { background:#EF4444 !important; color:#fff; }
+    .actions button { padding:6px 10px; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
+    .sell-btn { background:#22c55e; color:#041312; }
+    .del-btn  { background:#ef4444; color:#fff; }
+    details.archive { background:#0c1422; border:1px solid #203047; border-radius:10px; margin:10px 0; padding:8px 10px; }
+    details.archive > summary { cursor:pointer; color:#cbd5e1; font-weight:700; outline:none; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#0a192f; color:#94a3b8; font-size:0.85em; margin-left:8px; vertical-align: middle;}
+    .metrics { display:flex; gap:14px; justify-content:center; margin:16px 0; color:#cbd5e1; }
+    .metric { background:#0a192f; padding:10px 12px; border-radius:8px; }
+    .metric b { color:#00ffc8; }
+    .virtual-label { display: inline-block; padding: 3px 8px; border-radius: 999px; background-color: #3b82f6; color: #fff; font-size: 0.8em; margin-left: 8px; vertical-align: middle; font-weight: 600; }
+    #addArchiveForm { padding: 20px; background: #222c44; border-radius: 12px; margin-top: 15px; margin-bottom: 30px; box-shadow: 0 0 14px #00ffc8bb; }
+    #addArchiveForm input { width: 130px; }
+    #addArchiveForm button { background: #8b5cf6; }
+    #addArchiveForm button:hover { background: #a78bfa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="navbar">
+      <a href="index.html">Home</a>
+      <a href="Holdings & Archives.html">Holdings &amp; Archives</a>
+      <a href="model.html">Model</a>
+    </nav>
+
+    <div id="loginSection"></div>
+
+    <h1>Holdings &amp; Archives</h1>
+    <p class="sub">Live view of current holdings with P/L, plus archived realized trades grouped by quarter.</p>
+
+    <div class="metrics" id="topMetrics">
+      <div class="metric">Total Invested: <b id="mInvested">$0.00</b></div>
+      <div class="metric">Total Value: <b id="mValue">$0.00</b></div>
+      <div class="metric">Unrealized P/L: <b id="mUnreal">$0.00 (0.0%)</b></div>
+      <div class="metric">Realized (All Time): <b id="mRealized">$0.00</b></div>
+    </div>
+
+    <h2>Current Holdings</h2>
+    <table id="holdingsTable">
+      <thead><tr><th>Symbol</th><th>Shares</th><th>Buy Price</th><th>Current Price</th><th>Value</th><th>Unrealized P/L</th><th>Duration</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="addInvestmentForm" class="input-group" style="margin-top: 22px; display: none;">
+      <input type="text" id="newSymbol" placeholder="Symbol"/><input type="number" id="newShares" placeholder="Shares"/><input type="number" id="newPrice" placeholder="Buy Price"/><input type="text" id="newDate" placeholder="Date (dd/mm/yyyy)"/><input type="text" id="newReasoning" placeholder="Reasoning"/><button onclick="addInvestment()">Add Investment</button>
+    </div>
+    
+    <div id="adminArchiveSection" style="display: none;">
+      <h2>Add Archived Trade</h2>
+      <div id="addArchiveForm" class="input-group">
+        <input type="text" id="archiveSymbol" placeholder="Symbol" />
+        <input type="number" id="archiveShares" placeholder="Shares" />
+        <input type="number" id="archiveBuyPrice" placeholder="Buy Price" />
+        <input type="text" id="archiveBuyDate" placeholder="Buy Date (dd/mm/yyyy)" />
+        <input type="number" id="archiveSellPrice" placeholder="Sell Price" />
+        <input type="text" id="archiveSellDate" placeholder="Sell Date (dd/mm/yyyy)" />
+        <button onclick="addArchivedTrade()">Add Archived Trade</button>
+      </div>
+    </div>
+    
+    <h2>Archived Trades <span class="pill" id="archiveCount">0 groups</span></h2>
+    <div id="archives"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBmCJR5WMYqve41_n9LV8P1A1bbIw-bjQ4",
+      authDomain: "tracker-b57d5.firebaseapp.com",
+      databaseURL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "tracker-b57d5",
+      storageBucket: "tracker-b57d5.firebasestorage.app",
+      messagingSenderId: "915645082004",
+      appId: "1:915645082004:web:662514ba16def0db584781"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    let isAdmin = false;
+
+    const fmt = n => "$" + (Number(n) || 0).toFixed(2);
+    const pct = n => (Number(n) || 0).toFixed(1) + "%";
+    const daysSince = (dStr) => dStr ? Math.floor((new Date() - new Date(dStr.split('/').reverse().join('-'))) / 864e5) : 0;
+    const daysBetween = (s, e) => s && e ? Math.floor((new Date(e.split('/').reverse().join('-')) - new Date(s.split('/').reverse().join('-'))) / 864e5) : 0;
+    const fetchLivePrice = async (symbol) => {
+      try {
+        const r = await fetch(`https://api.api-ninjas.com/v1/stockprice?ticker=${symbol}`, { headers: { 'X-Api-Key': 'oeiIudISb7t/OIbJwp21WA==xTFCjztakHH9mqbn' } });
+        const d = await r.json(); return d.price || 0;
+      } catch { return 0; }
+    };
+    const getQuarter = (date) => Math.floor(date.getMonth() / 3) + 1;
+
+    window.login = () => auth.signInWithEmailAndPassword(document.getElementById("loginEmail").value, document.getElementById("loginPass").value).catch(e => alert(e.message));
+    window.logout = () => auth.signOut();
+    window.addInvestment = async () => {
+        if (!isAdmin) return;
+        const symbol = document.getElementById("newSymbol").value.trim().toUpperCase();
+        const shares = parseFloat(document.getElementById("newShares").value);
+        const price = parseFloat(document.getElementById("newPrice").value);
+        const date = document.getElementById("newDate").value.trim();
+        if (!symbol || !shares || !price || !/^\d{2}\/\d{2}\/\d{4}$/.test(date)) return alert("Please fill all fields.");
+        await db.ref("investments").push({ symbol, shares, price, date, reasoning: document.getElementById("newReasoning").value.trim() });
+    };
+    window.deleteInvestment = (id) => {
+        if (!isAdmin || !confirm("Delete this holding?")) return;
+        db.ref(`investments/${id}`).remove();
+    };
+    window.sellInvestment = async (id) => {
+        if (!isAdmin) return;
+        const snap = await db.ref(`investments/${id}`).once("value");
+        const inv = snap.val();
+        if (!inv) return;
+        const sellPrice = parseFloat(prompt(`Enter sell price for ${inv.symbol}:`, inv.price));
+        if (!sellPrice) return;
+        const sellDate = prompt("Enter sell date (dd/mm/yyyy):", new Date().toLocaleDateString("en-GB"));
+        if (!sellDate) return;
+        const pl = (sellPrice - inv.price) * inv.shares;
+        const [d,m,y] = sellDate.split('/');
+        const sellDateObj = new Date(y, m - 1, d);
+        const archiveKey = `Q${getQuarter(sellDateObj)}_${sellDateObj.getFullYear()}`;
+        const newKey = db.ref('realized').push().key;
+        const realizedData = { ...inv, buyPrice: inv.price, buyDate: inv.date, sellPrice, sellDate, pl };
+        delete realizedData.date;
+        const updates = {};
+        updates[`/realized/${newKey}`] = realizedData;
+        updates[`/archivedTrades/${archiveKey}/${newKey}`] = realizedData;
+        updates[`/investments/${id}`] = null;
+        await db.ref().update(updates);
+    };
+    window.addArchivedTrade = async () => {
+        if (!isAdmin) return;
+        const symbol = document.getElementById("archiveSymbol").value.trim().toUpperCase();
+        const shares = parseFloat(document.getElementById("archiveShares").value);
+        const buyPrice = parseFloat(document.getElementById("archiveBuyPrice").value);
+        const buyDate = document.getElementById("archiveBuyDate").value.trim();
+        const sellPrice = parseFloat(document.getElementById("archiveSellPrice").value);
+        const sellDate = document.getElementById("archiveSellDate").value.trim();
+        const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
+        if (!symbol || !shares || !buyPrice || !sellPrice || !dateRegex.test(buyDate) || !dateRegex.test(sellDate)) {
+            return alert("Please fill all fields with valid data and date formats (dd/mm/yyyy).");
+        }
+        const pl = (sellPrice - buyPrice) * shares;
+        const [d, m, y] = sellDate.split('/');
+        const sellDateObj = new Date(y, m - 1, d);
+        const archiveKey = `Q${getQuarter(sellDateObj)}_${sellDateObj.getFullYear()}`;
+        
+        // This is for REAL trades, so it writes to both /realized and /archivedTrades
+        const newKey = db.ref('realized').push().key;
+        const tradeData = { symbol, shares, buyPrice, buyDate, sellPrice, sellDate, pl };
+
+        const updates = {};
+        updates[`/realized/${newKey}`] = tradeData;
+        updates[`/archivedTrades/${archiveKey}/${newKey}`] = tradeData;
+
+        try {
+            await db.ref().update(updates);
+            alert(`Successfully added archived trade for ${symbol}.`);
+            ["archiveSymbol", "archiveShares", "archiveBuyPrice", "archiveBuyDate", "archiveSellPrice", "archiveSellDate"].forEach(id => document.getElementById(id).value = "");
+        } catch (error) {
+            alert("Failed to add archived trade."); console.error(error);
+        }
+    };
+
+    async function renderPage() {
+        const [invSnap, realSnap, archSnap] = await Promise.all([
+            db.ref("investments").once("value"),
+            db.ref("realized").once("value"),
+            db.ref("archivedTrades").once("value")
+        ]);
+        const investments = invSnap.val() || {};
+        const realizedTrades = realSnap.val() || {};
+        const archives = archSnap.val() || {};
+
+        const holdingsTbody = document.querySelector("#holdingsTable tbody");
+        holdingsTbody.innerHTML = "";
+        let totalInvested = 0, totalValue = 0;
+        if (Object.keys(investments).length > 0) {
+            const symbols = [...new Set(Object.values(investments).map(i => i.symbol))];
+            const prices = {};
+            await Promise.all(symbols.map(async (sym) => { prices[sym] = await fetchLivePrice(sym); }));
+            for (const [id, inv] of Object.entries(investments)) {
+                const currentPrice = prices[inv.symbol] || 0;
+                totalInvested += inv.shares * inv.price;
+                totalValue += inv.shares * currentPrice;
+                const value = inv.shares * currentPrice;
+                const pl = value - (inv.shares * inv.price);
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${inv.symbol}</td><td>${inv.shares}</td><td>${fmt(inv.price)}</td><td>${fmt(currentPrice)}</td><td>${fmt(value)}</td><td class="${pl >= 0 ? 'profit' : 'loss'}">${fmt(pl)} (${pct(pl / (inv.shares*inv.price) * 100)})</td><td>${daysSince(inv.date)} days</td><td class="actions">${isAdmin ? `<button class="sell-btn" onclick="sellInvestment('${id}')">Sell</button><button class="del-btn" onclick="deleteInvestment('${id}')">Delete</button>` : ''}</td>`;
+                holdingsTbody.appendChild(tr);
+            }
+        } else {
+            holdingsTbody.innerHTML = `<tr><td colspan="8" style="color:#94a3b8;">No current holdings</td></tr>`;
+        }
+
+        const unrealizedPL = totalValue - totalInvested;
+        const realizedPL = Object.values(realizedTrades).reduce((sum, trade) => sum + (trade.pl || 0), 0);
+        document.getElementById("mInvested").textContent = fmt(totalInvested);
+        document.getElementById("mValue").textContent = fmt(totalValue);
+        const unrealEl = document.getElementById("mUnreal");
+        unrealEl.textContent = `${fmt(unrealizedPL)} (${pct(totalInvested > 0 ? unrealizedPL/totalInvested*100 : 0)})`;
+        unrealEl.className = unrealizedPL >= 0 ? "profit" : "loss";
+        const realizedEl = document.getElementById("mRealized");
+        realizedEl.textContent = fmt(realizedPL);
+        realizedEl.className = realizedPL >= 0 ? "profit" : "loss";
+
+        const archivesWrap = document.getElementById("archives");
+        archivesWrap.innerHTML = "";
+        // ---- START: CORRECTED SORTING LOGIC ----
+        const groupKeys = Object.keys(archives).sort((a,b) => {
+            const [qa, ya] = a.replace("Q", "").split("_");
+            const [qb, yb] = b.replace("Q", "").split("_");
+            // Sort by year descending, then by quarter descending
+            return yb - ya || qb - qa;
+        });
+        // ---- END: CORRECTED SORTING LOGIC ----
+        document.getElementById("archiveCount").textContent = `${groupKeys.length} groups`;
+        if (groupKeys.length === 0) {
+            archivesWrap.innerHTML = `<p style="color:#94a3b8">No archived trades yet.</p>`;
+        }
+        for (const key of groupKeys) {
+            const trades = archives[key] || {};
+            const count = Object.keys(trades).length;
+            const details = document.createElement("details");
+            let virtualLabel = key === 'Q2_2025' ? '<span class="virtual-label">Virtual</span>' : '';
+            details.innerHTML = `<summary>${key.replace("_", " ")} ${virtualLabel} <span class="pill">${count} trade${count===1?"":"s"}</span></summary>`;
+            const table = document.createElement("table");
+            table.innerHTML = `<thead><tr><th>Symbol</th><th>Shares</th><th>Buy Price</th><th>Sell Price</th><th>Buy Date</th><th>Sell Date</th><th>Duration</th><th>P/L</th></tr></thead><tbody></tbody>`;
+            const tbody = table.querySelector("tbody");
+            for (const trade of Object.values(trades)) {
+                const buyDateField = trade.buyDate || trade.date;
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${trade.symbol}</td><td>${trade.shares}</td><td>${fmt(trade.buyPrice)}</td><td>${fmt(trade.sellPrice)}</td><td>${buyDateField}</td><td>${trade.sellDate}</td><td>${daysBetween(buyDateField, trade.sellDate)} days</td><td class="${trade.pl >= 0 ? 'profit' : 'loss'}">${fmt(trade.pl)}</td>`;
+                tbody.appendChild(tr);
+            }
+            details.appendChild(table);
+            archivesWrap.appendChild(details);
+        }
+    }
+
+    auth.onAuthStateChanged(async user => {
+        const addInvestmentForm = document.getElementById("addInvestmentForm");
+        const adminArchiveSection = document.getElementById("adminArchiveSection");
+        const loginSection = document.getElementById("loginSection");
+        if (user) {
+            const roleSnap = await db.ref(`roles/${user.uid}`).once("value");
+            isAdmin = roleSnap.val() === "admin";
+            loginSection.innerHTML = `Logged in as <strong>${user.email}</strong>${isAdmin ? " (Admin)" : ""}<br/><button id="logoutBtn" onclick="logout()">Logout</button>`;
+            addInvestmentForm.style.display = isAdmin ? 'flex' : 'none';
+            adminArchiveSection.style.display = isAdmin ? 'block' : 'none';
+        } else {
+            isAdmin = false;
+            loginSection.innerHTML = `<input type="email" id="loginEmail" placeholder="Email"/><input type="password" id="loginPass" placeholder="Password"/><button onclick="login()">Login</button>`;
+            addInvestmentForm.style.display = 'none';
+            adminArchiveSection.style.display = 'none';
+        }
+        await renderPage();
+    });
+
+    db.ref().on("value", renderPage);
+  </script>
+</body>
+</html>

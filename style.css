@@ -1,0 +1,288 @@
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #0a0f16;
+  color: white;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: auto;
+}
+
+h1, h2 {
+  color: #00ffc8;
+}
+
+.input-group input, .input-group button {
+  padding: 10px;
+  margin: 5px;
+  border-radius: 4px;
+  border: none;
+}
+
+.input-group input {
+  width: 180px;
+}
+
+.input-group button {
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+.input-group button:hover {
+  background-color: #0056b3;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 10px;
+  text-align: center;
+  background-color: #1c1c1c;
+  border: 1px solid #444;
+}
+
+th {
+  background-color: #222;
+}
+
+.profit {
+  color: #00ff00;
+}
+
+.loss {
+  color: #ff4c4c;
+}
+
+.portfolio-summary {
+  margin-top: 20px;
+  font-size: 1.1em;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+#reasoning {
+  width: 100%;
+  height: 100px;
+  padding: 10px;
+  font-size: 1em;
+  resize: vertical;
+  border-radius: 6px;
+  border: 1px solid #cccccc;
+  background-color: white;
+  color: #000000;
+  box-sizing: border-box;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+textarea {
+  background-color: white;
+  color: black;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 1em;
+  box-sizing: border-box;
+}
+
+#reasoningList {
+  background-color: #1c1c1c;
+  padding: 15px;
+  border-radius: 10px;
+  margin-top: 10px;
+  border: 1px solid #333;
+}
+
+#reasoningList li {
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+}
+
+#reasoningList li:last-child {
+  border-bottom: none;
+}
+
+.login-section {
+  margin-bottom: 20px;
+}
+
+.login-section input {
+  padding: 10px;
+  margin: 5px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.login-section button {
+  padding: 10px;
+  margin: 5px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.login-section button:hover {
+  background-color: #0056b3;
+}
+
+.navbar {
+  background-color: #111;
+  padding: 10px 0;
+  margin-bottom: 20px;
+  text-align: center;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.navbar a {
+  color: #00ffc8;
+  text-decoration: none;
+  margin: 0 15px;
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.navbar a:hover {
+  text-decoration: underline;
+}
+
+#postTitle {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  font-size: 1em;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+}
+
+#postBody {
+  width: 100%;
+  height: 180px;
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 1em;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+#postEditor button {
+  background-color: #00ffc8;
+  color: black;
+  padding: 10px 15px;
+  margin-top: 10px;
+  margin-right: 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#postEditor button:hover {
+  background-color: #00d9aa;
+}
+
+/* Clear Posts button specifically */
+#clearPostsBtn {
+  background-color: #ff4c4c;
+  color: white;
+}
+
+#clearPostsBtn:hover {
+  background-color: #cc0000;
+}
+
+/* Blog Post Cards */
+.post-card {
+  background-color: #121212;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s;
+}
+
+.post-card:hover {
+  transform: scale(1.01);
+}
+
+.post-card h3 {
+  color: #00ffc8;
+  margin-bottom: 5px;
+}
+
+.post-card .date {
+  font-size: 0.85em;
+  color: #aaaaaa;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.post-card p {
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+#postList {
+  margin-top: 30px;
+  border-top: 2px solid #333;
+  padding-top: 20px;
+}
+
+/* ===== Investment Model Page (Dark Theme) ===== */
+.model-summary {
+  background-color: #121212; /* Dark background */
+  border-left: 4px solid #00ffc8; /* Match your brand color */
+  padding: 1.5rem;
+  margin: 2rem 0;
+  line-height: 1.6;
+  font-size: 1.05rem;
+  color: white; /* Ensure text is visible */
+}
+
+.model-links {
+  margin-top: 2rem;
+}
+
+.model-links h2 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  color: #00ffc8; /* Brand color */
+}
+
+.model-links ul {
+  list-style: none;
+  padding: 0;
+}
+
+.model-links ul li {
+  margin-bottom: 0.5rem;
+}
+
+.model-links ul li a {
+  color: #00ffc8;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.model-links ul li a:hover {
+  text-decoration: underline;
+}
+
