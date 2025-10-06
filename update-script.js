@@ -1,82 +1,95 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
-try {
-  // Decode the service account key from Base64
-  const serviceAccount_base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (!serviceAccount_base64) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 secret is not set.");
-  }
-  const serviceAccount_json = Buffer.from(serviceAccount_base64, 'base64').toString('utf8');
-  const serviceAccount = JSON.parse(serviceAccount_json);
-
-  const databaseURL = process.env.DATABASE_URL;
-  const apiKey = process.env.API_NINJAS_KEY;
-
-  if (!databaseURL || !apiKey) {
-    throw new Error("DATABASE_URL or API_NINJAS_KEY is not set.");
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: databaseURL
-  });
-
-  const db = admin.database();
-
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-  async function fetchLivePrice(symbol) {
+// --- Helper Functions ---
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const fetchWithRetry = async (url, options, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(`https://api.api-ninjas.com/v1/stockprice?ticker=${symbol}`, {
-        headers: { 'X-Api-Key': apiKey }
-      });
-      if (!response.ok) return 0;
-      const data = await response.json();
-      return data.price || 0;
-    } catch (error) {
-      console.error(`Error fetching price for ${symbol}:`, error);
-      return 0;
+      return await fetch(url, options);
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await sleep(1000); // Wait 1 second before retrying
     }
   }
-
-  async function updateAllPrices() {
-    console.log("Starting price update job...");
-    const investments = (await db.ref('investments').once('value')).val();
-
-    if (!investments) {
-      console.log("No investments found. Exiting.");
-      process.exit(0);
-    }
-
-    const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
-    const priceCache = {};
-
-    const batchSize = 5;
-    for (let i = 0; i < symbols.length; i += batchSize) {
-      const batch = symbols.slice(i, i + batchSize);
-      await Promise.all(batch.map(async (symbol) => {
-        const price = await fetchLivePrice(symbol);
-        if (price > 0) {
-          priceCache[symbol] = price;
-          console.log(`Fetched ${symbol}: ${price}`);
+};
+const fetchLivePrice = async (symbol, apiKey) => {
+  const url = `https://api.api-ninjas.com/v1/stockprice?ticker=${symbol}`;
+  const res = await fetchWithRetry(url, { headers: { 'X-Api-Key': apiKey } });
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.price || 0;
+};
+const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
+    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
+    for (let i = 0; i < 7; i++) {
+        const formattedDate = targetDate.toISOString().split('T')[0];
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
+        const res = await fetchWithRetry(url);
+        if(res.ok) {
+            const data = await res.json();
+            if (data?.["Time Series (Daily)"]?.[formattedDate]) {
+                return parseFloat(data["Time Series (Daily)"][formattedDate]["4. close"]);
+            }
         }
-      }));
-      if (i + batchSize < symbols.length) await sleep(1000);
+        targetDate.setDate(targetDate.getDate() - 1);
     }
+    return 0;
+};
 
-    if (Object.keys(priceCache).length > 0) {
-      await db.ref('priceCache').set(priceCache);
-      console.log("Successfully updated price cache in Firebase.");
-    } else {
-      console.log("No prices were fetched.");
+// --- Main Execution ---
+async function main() {
+  try {
+    // --- Initialize Firebase ---
+    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: process.env.DATABASE_URL
+    });
+    const db = admin.database();
+
+    // --- Fetch Investments ---
+    const investments = (await db.ref('investments').once('value')).val();
+    if (!investments) return console.log("No investments found.");
+
+    // --- Update Live Price Cache ---
+    const ninjaApiKey = process.env.API_NINJAS_KEY;
+    const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
+    if (!symbols.includes('SPY')) symbols.push('SPY');
+    
+    const priceCache = {};
+    for (const symbol of symbols) {
+        priceCache[symbol] = await fetchLivePrice(symbol, ninjaApiKey);
+        await sleep(200); // 200ms delay between each individual request
     }
-    process.exit(0);
+    await db.ref('priceCache').set(priceCache);
+    console.log("Updated price cache:", priceCache);
+
+    // --- Update Benchmark Cache ---
+    let totalInvested = 0, totalValue = 0;
+    Object.values(investments).forEach(inv => {
+        totalInvested += inv.shares * inv.price;
+        totalValue += inv.shares * (priceCache[inv.symbol] || 0);
+    });
+
+    const earliestDateStr = Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-'))).reduce((a, b) => a < b ? a : b).toLocaleDateString('en-GB');
+    
+    const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
+    const spyStartPrice = await fetchHistoricalPrice('SPY', earliestDateStr, alphaApiKey);
+    const spyCurrentPrice = priceCache['SPY'] || 0;
+    
+    const benchmarkCache = { ourReturn: 0, spyReturn: 0 };
+    if (totalInvested > 0 && spyStartPrice > 0 && spyCurrentPrice > 0) {
+        benchmarkCache.ourReturn = ((totalValue - totalInvested) / totalInvested) * 100;
+        benchmarkCache.spyReturn = ((spyCurrentPrice - spyStartPrice) / spyStartPrice) * 100;
+    }
+    await db.ref('benchmarkCache').set(benchmarkCache);
+    console.log("Updated benchmark cache:", benchmarkCache);
+
+  } catch (e) {
+    console.error("FATAL ERROR:", e);
+    process.exit(1);
   }
-
-  updateAllPrices();
-
-} catch (e) {
-  console.error("FATAL ERROR:", e.message);
-  process.exit(1);
 }
+
+main();
