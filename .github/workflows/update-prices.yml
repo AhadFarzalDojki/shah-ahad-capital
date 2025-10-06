@@ -25,4 +25,4 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
           API_NINJAS_KEY: ${{ secrets.API_NINJAS_KEY }}
-        run: node ./.github/workflows/update-script.js
+        run: node .github/workflows/update-script.js
