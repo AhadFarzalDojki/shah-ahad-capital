@@ -9,20 +9,15 @@ jobs:
   update-prices:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '18'
-
-      - name: Install dependencies
-        run: npm install firebase-admin node-fetch@2
-
+      - run: npm install firebase-admin node-fetch@2
       - name: Run update script
         env:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
           API_NINJAS_KEY: ${{ secrets.API_NINJAS_KEY }}
+          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
         run: node update-script.js
