@@ -2,9 +2,9 @@ name: Update Firebase Stock Prices
 
 on:
   schedule:
-    # Runs every 15 minutes, all day, every day.
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    # Runs every 5 minutes, all day, every day
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allows manual running
 
 jobs:
   update-prices:
