@@ -1,47 +1,25 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
-// --- Helper Functions ---
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-async function fetchFmpPrice(symbol, apiKey) {
-  const url = `https://financialmodelingprep.com/api/v3/quote-short/${symbol}?apikey=${apiKey}`;
+async function fetchFinnhubPrice(symbol, apiKey) {
+  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`FMP API error for ${symbol}: ${res.status}`);
+      console.error(`Finnhub API error for ${symbol}: ${res.status}`);
       return 0;
     }
     const data = await res.json();
-    if (data && data.length > 0) {
-      return data[0].price;
-    }
-    return 0;
+    // Finnhub uses 'c' for current price
+    return data.c || 0;
   } catch (e) {
-    console.error(`Failed to fetch ${symbol} from FMP`, e);
+    console.error(`Failed to fetch ${symbol} from Finnhub`, e);
     return 0;
   }
 }
 
-// We still need Alpha Vantage for historical data for the benchmark
-async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
-    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
-    for (let i = 0; i < 7; i++) {
-        const formattedDate = targetDate.toISOString().split('T')[0];
-        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
-        try {
-            const r = await fetch(url);
-            if(r.ok) {
-                const d = await r.json();
-                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
-                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
-                }
-            }
-        } catch (error) { console.error(error); }
-        targetDate.setDate(targetDate.getDate() - 1);
-    }
-    return 0;
-}
+// Alpha Vantage is still needed for the one-time historical price check
+async function fetchHistoricalPrice(symbol, dateStr, apiKey) { /* ... This function remains the same ... */ }
 
 async function main() {
   try {
@@ -59,13 +37,13 @@ async function main() {
     }
     
     let priceCache = (await db.ref('priceCache').once('value')).val() || {};
-    const fmpApiKey = process.env.FMP_API_KEY;
+    const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
     if (!symbols.includes('SPY')) symbols.push('SPY');
     
-    // FMP is fast, so we can fetch in parallel.
+    // Finnhub is fast enough to run all requests in parallel
     await Promise.all(symbols.map(async (symbol) => {
-        const newPrice = await fetchFmpPrice(symbol, fmpApiKey);
+        const newPrice = await fetchFinnhubPrice(symbol, finnhubApiKey);
         if (newPrice > 0) {
             priceCache[symbol] = newPrice;
             console.log(`Successfully updated ${symbol}: ${newPrice}`);
@@ -77,7 +55,7 @@ async function main() {
     await db.ref('priceCache').set(priceCache);
     console.log("Finished updating price cache.");
 
-    // Benchmark calculation remains the same...
+    // The rest of the script (benchmark logic) remains the same
     let totalInvested = 0, totalValue = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
@@ -102,6 +80,26 @@ async function main() {
     if (admin.apps.length) admin.app().delete();
     process.exit(1);
   }
+}
+
+// We need to re-paste the full historical price function here as it was collapsed
+async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
+    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
+    for (let i = 0; i < 7; i++) {
+        const formattedDate = targetDate.toISOString().split('T')[0];
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
+        try {
+            const r = await fetch(url);
+            if(r.ok) {
+                const d = await r.json();
+                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
+                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
+                }
+            }
+        } catch (error) { console.error(error); }
+        targetDate.setDate(targetDate.getDate() - 1);
+    }
+    return 0;
 }
 
 main();
