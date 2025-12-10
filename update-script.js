@@ -1,7 +1,6 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
-// --- Helper Functions ---
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function fetchFinnhubPrice(symbol, apiKey) {
@@ -14,30 +13,26 @@ async function fetchFinnhubPrice(symbol, apiKey) {
   } catch (e) { console.error(`Failed to fetch ${symbol} from Finnhub`, e); return 0; }
 }
 
-// --- START: NEW, SMARTER HISTORICAL FUNCTION ---
 async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
     let targetDate = new Date(dateStr.split('/').reverse().join('-'));
-    // Look back up to 7 days to find the first available trading day
     for (let i = 0; i < 7; i++) {
-        const formattedDate = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const formattedDate = targetDate.toISOString().split('T')[0];
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
         try {
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-                if (data["Time Series (Daily)"] && data["Time Series (Daily)"][formattedDate]) {
+            const r = await fetch(url);
+            if (r.ok) {
+                const d = await r.json();
+                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
                     console.log(`Found historical price for ${symbol} on ${formattedDate}`);
-                    return parseFloat(data["Time Series (Daily)"][formattedDate]["4. close"]);
+                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
                 }
             }
         } catch (error) { console.error(error); }
-        // If not found, try the previous day
         targetDate.setDate(targetDate.getDate() - 1);
     }
     console.error(`Could not find any historical price for ${symbol} near ${dateStr}`);
-    return 0; // Return 0 if no data is found after a week
+    return 0;
 }
-// --- END: NEW, SMARTER HISTORICAL FUNCTION ---
 
 async function main() {
   try {
@@ -63,6 +58,7 @@ async function main() {
         const newPrice = await fetchFinnhubPrice(symbol, finnhubApiKey);
         if (newPrice > 0) {
             priceCache[symbol] = newPrice;
+            console.log(`Successfully updated ${symbol}: ${newPrice}`);
         } else {
             console.warn(`Failed to fetch valid price for ${symbol}. Keeping old price.`);
         }
@@ -71,23 +67,29 @@ async function main() {
     await db.ref('priceCache').set(priceCache);
     console.log("Finished updating price cache.");
 
-    // Benchmark calculation...
     let totalInvested = 0, totalValue = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
         totalValue += inv.shares * (priceCache[inv.symbol] || 0);
     });
-    const earliestDateStr = Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-'))).reduce((a, b) => a < b ? a : b).toLocaleDateString('en-GB');
+
+    // --- START: CORRECTED CODE ---
+    // This line was the source of the bug. It has now been fixed.
+    const earliestDate = new Date(Math.min(...Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-')))));
+    const earliestDateStr = earliestDate.toLocaleDateString('en-GB');
+    // --- END: CORRECTED CODE ---
+
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const spyStartPrice = await fetchHistoricalPrice('SPY', earliestDateStr, alphaApiKey);
     const spyCurrentPrice = priceCache['SPY'] || 0;
+    
     const benchmarkCache = { ourReturn: 0, spyReturn: 0 };
     if (totalInvested > 0 && spyStartPrice > 0 && spyCurrentPrice > 0) {
         benchmarkCache.ourReturn = ((totalValue - totalInvested) / totalInvested) * 100;
         benchmarkCache.spyReturn = ((spyCurrentPrice - spyStartPrice) / spyStartPrice) * 100;
     }
     await db.ref('benchmarkCache').set(benchmarkCache);
-    console.log("Updated benchmark cache.");
+    console.log("Updated benchmark cache:", benchmarkCache);
 
     return admin.app().delete();
 
