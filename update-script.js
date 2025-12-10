@@ -1,25 +1,43 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
+// --- Helper Functions ---
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 async function fetchFinnhubPrice(symbol, apiKey) {
   const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) {
-      console.error(`Finnhub API error for ${symbol}: ${res.status}`);
-      return 0;
-    }
+    if (!res.ok) { console.error(`Finnhub API error for ${symbol}: ${res.status}`); return 0; }
     const data = await res.json();
-    // Finnhub uses 'c' for current price
     return data.c || 0;
-  } catch (e) {
-    console.error(`Failed to fetch ${symbol} from Finnhub`, e);
-    return 0;
-  }
+  } catch (e) { console.error(`Failed to fetch ${symbol} from Finnhub`, e); return 0; }
 }
 
-// Alpha Vantage is still needed for the one-time historical price check
-async function fetchHistoricalPrice(symbol, dateStr, apiKey) { /* ... This function remains the same ... */ }
+// --- START: NEW, SMARTER HISTORICAL FUNCTION ---
+async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
+    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
+    // Look back up to 7 days to find the first available trading day
+    for (let i = 0; i < 7; i++) {
+        const formattedDate = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
+        try {
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data["Time Series (Daily)"] && data["Time Series (Daily)"][formattedDate]) {
+                    console.log(`Found historical price for ${symbol} on ${formattedDate}`);
+                    return parseFloat(data["Time Series (Daily)"][formattedDate]["4. close"]);
+                }
+            }
+        } catch (error) { console.error(error); }
+        // If not found, try the previous day
+        targetDate.setDate(targetDate.getDate() - 1);
+    }
+    console.error(`Could not find any historical price for ${symbol} near ${dateStr}`);
+    return 0; // Return 0 if no data is found after a week
+}
+// --- END: NEW, SMARTER HISTORICAL FUNCTION ---
 
 async function main() {
   try {
@@ -41,12 +59,10 @@ async function main() {
     const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
     if (!symbols.includes('SPY')) symbols.push('SPY');
     
-    // Finnhub is fast enough to run all requests in parallel
     await Promise.all(symbols.map(async (symbol) => {
         const newPrice = await fetchFinnhubPrice(symbol, finnhubApiKey);
         if (newPrice > 0) {
             priceCache[symbol] = newPrice;
-            console.log(`Successfully updated ${symbol}: ${newPrice}`);
         } else {
             console.warn(`Failed to fetch valid price for ${symbol}. Keeping old price.`);
         }
@@ -55,7 +71,7 @@ async function main() {
     await db.ref('priceCache').set(priceCache);
     console.log("Finished updating price cache.");
 
-    // The rest of the script (benchmark logic) remains the same
+    // Benchmark calculation...
     let totalInvested = 0, totalValue = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
@@ -80,26 +96,6 @@ async function main() {
     if (admin.apps.length) admin.app().delete();
     process.exit(1);
   }
-}
-
-// We need to re-paste the full historical price function here as it was collapsed
-async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
-    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
-    for (let i = 0; i < 7; i++) {
-        const formattedDate = targetDate.toISOString().split('T')[0];
-        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
-        try {
-            const r = await fetch(url);
-            if(r.ok) {
-                const d = await r.json();
-                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
-                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
-                }
-            }
-        } catch (error) { console.error(error); }
-        targetDate.setDate(targetDate.getDate() - 1);
-    }
-    return 0;
 }
 
 main();
