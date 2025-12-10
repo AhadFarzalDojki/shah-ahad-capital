@@ -7,10 +7,10 @@ async function fetchFinnhubPrice(symbol, apiKey) {
   const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) { console.error(`Finnhub API error for ${symbol}: ${res.status}`); return 0; }
+    if (!res.ok) { return 0; }
     const data = await res.json();
     return data.c || 0;
-  } catch (e) { console.error(`Failed to fetch ${symbol} from Finnhub`, e); return 0; }
+  } catch (e) { return 0; }
 }
 
 async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
@@ -22,6 +22,15 @@ async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
             const r = await fetch(url);
             if (r.ok) {
                 const d = await r.json();
+                
+                // --- START: THIS IS THE NEW DIAGNOSTIC LINE ---
+                console.log('Alpha Vantage Response:', JSON.stringify(d));
+                // --- END: THIS IS THE NEW DIAGNOSTIC LINE ---
+
+                if (d["Information"] || d["Note"]) {
+                    console.warn("Alpha Vantage API limit hit or note received.");
+                    return 0; // Explicitly return 0 if we get a note
+                }
                 if (d?.["Time Series (Daily)"]?.[formattedDate]) {
                     console.log(`Found historical price for ${symbol} on ${formattedDate}`);
                     return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
@@ -30,7 +39,6 @@ async function fetchHistoricalPrice(symbol, dateStr, apiKey) {
         } catch (error) { console.error(error); }
         targetDate.setDate(targetDate.getDate() - 1);
     }
-    console.error(`Could not find any historical price for ${symbol} near ${dateStr}`);
     return 0;
 }
 
@@ -56,14 +64,8 @@ async function main() {
     
     await Promise.all(symbols.map(async (symbol) => {
         const newPrice = await fetchFinnhubPrice(symbol, finnhubApiKey);
-        if (newPrice > 0) {
-            priceCache[symbol] = newPrice;
-            console.log(`Successfully updated ${symbol}: ${newPrice}`);
-        } else {
-            console.warn(`Failed to fetch valid price for ${symbol}. Keeping old price.`);
-        }
+        if (newPrice > 0) priceCache[symbol] = newPrice;
     }));
-    
     await db.ref('priceCache').set(priceCache);
     console.log("Finished updating price cache.");
 
@@ -73,11 +75,8 @@ async function main() {
         totalValue += inv.shares * (priceCache[inv.symbol] || 0);
     });
 
-    // --- START: CORRECTED CODE ---
-    // This line was the source of the bug. It has now been fixed.
     const earliestDate = new Date(Math.min(...Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-')))));
     const earliestDateStr = earliestDate.toLocaleDateString('en-GB');
-    // --- END: CORRECTED CODE ---
 
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const spyStartPrice = await fetchHistoricalPrice('SPY', earliestDateStr, alphaApiKey);
