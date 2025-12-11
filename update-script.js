@@ -6,28 +6,25 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
   const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) { console.error(`Finnhub API error for ${symbol}: ${res.status}`); return 0; }
+    if (!res.ok) { console.error(`Finnhub quote API error for ${symbol}: ${res.status}`); return 0; }
     const data = await res.json();
     return data.c || 0;
   } catch (e) { console.error(`Failed to fetch ${symbol} from Finnhub`, e); return 0; }
 };
 
-const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
+const fetchFinnhubHistoricalPrice = async (symbol, dateStr, apiKey) => {
     let targetDate = new Date(dateStr.split('/').reverse().join('-'));
     for (let i = 0; i < 7; i++) {
-        const formattedDate = targetDate.toISOString().split('T')[0];
-        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
+        const to = Math.floor(targetDate.getTime() / 1000);
+        const from = to - 86400; // 24 hours before
+        const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
         try {
-            const r = await fetch(url);
-            if (r.ok) {
-                const d = await r.json();
-                if (d["Information"] || d["Note"]) { // Check for rate limit message
-                    console.warn("Alpha Vantage API limit hit or note received.");
-                    return 0; // Return 0 if limit is hit
-                }
-                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
-                    console.log(`Found historical price for ${symbol} on ${formattedDate}`);
-                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.s === 'ok' && data.c && data.c.length > 0) {
+                    console.log(`Found historical price for ${symbol} on ${targetDate.toLocaleDateString()}`);
+                    return data.c[data.c.length - 1]; // Get the last closing price in the array
                 }
             }
         } catch (error) { console.error(error); }
@@ -49,7 +46,6 @@ async function main() {
     const investments = (await db.ref('investments').once('value')).val();
     if (!investments) { console.log("No investments found."); return admin.app().delete(); }
     
-    // --- Update Live Price Cache (Fast) ---
     const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
     if (!symbols.includes('SPY')) symbols.push('SPY');
@@ -61,7 +57,6 @@ async function main() {
     await db.ref('priceCache').set(priceCache);
     console.log("Updated price cache.");
 
-    // --- Update Benchmark Cache (Smart) ---
     const earliestDate = new Date(Math.min(...Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-')))));
     const earliestDateStr = earliestDate.toLocaleDateString('en-GB');
     
@@ -69,19 +64,16 @@ async function main() {
     let spyStartPrice = 0;
 
     if (inceptionCache.date === earliestDateStr && inceptionCache.spyStartPrice > 0) {
-        console.log("Using cached inception price for SPY.");
         spyStartPrice = inceptionCache.spyStartPrice;
     } else {
-        console.log("Inception date changed or cache empty. Fetching new historical SPY price...");
-        const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
-        spyStartPrice = await fetchHistoricalPrice('SPY', earliestDateStr, alphaApiKey);
+        console.log("Fetching new historical SPY price from Finnhub...");
+        spyStartPrice = await fetchFinnhubHistoricalPrice('SPY', earliestDateStr, finnhubApiKey);
         if (spyStartPrice > 0) {
             await db.ref('inceptionCache').set({ date: earliestDateStr, spyStartPrice: spyStartPrice });
             console.log("Saved new inception data to cache.");
         }
     }
     
-    // --- Final Calculation ---
     let totalInvested = 0, totalValue = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
