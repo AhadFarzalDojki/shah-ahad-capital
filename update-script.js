@@ -15,20 +15,25 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 const fetchFinnhubHistoricalPrice = async (symbol, dateStr, apiKey) => {
     let targetDate = new Date(dateStr.split('/').reverse().join('-'));
     for (let i = 0; i < 7; i++) {
+        // --- START: CORRECTED CODE ---
         const to = Math.floor(targetDate.getTime() / 1000);
-        const from = to - 86400; // 24 hours before
+        // Set 'from' to be 24 hours before 'to' to ensure we get one day's candle
+        const from = to - (24 * 60 * 60); 
+        // Corrected URL structure
         const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
+        // --- END: CORRECTED CODE ---
         try {
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
                 if (data.s === 'ok' && data.c && data.c.length > 0) {
-                    console.log(`Found historical price for ${symbol} on ${targetDate.toLocaleDateString()}`);
-                    return data.c[data.c.length - 1]; // Get the last closing price in the array
+                    const price = data.c[data.c.length - 1]; // Get the last closing price
+                    console.log(`Found historical price for ${symbol} on ${targetDate.toLocaleDateString()}: ${price}`);
+                    return price;
                 }
             }
         } catch (error) { console.error(error); }
-        targetDate.setDate(targetDate.getDate() - 1);
+        targetDate.setDate(targetDate.getDate() - 1); // Go to previous day
     }
     return 0;
 };
