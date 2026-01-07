@@ -14,7 +14,6 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 
 async function main() {
   try {
-    // 1. Initialize Firebase
     const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
@@ -22,23 +21,35 @@ async function main() {
     });
     const db = admin.database();
 
-    // 2. Fetch All Data
+    // 1. Fetch All Data
     const [invSnap, realSnap, cacheSnap] = await Promise.all([
         db.ref('investments').once('value'),
         db.ref('realized').once('value'),
         db.ref('inceptionCache').once('value')
     ]);
 
-    const investments = invSnap.val() || {};
+    const investments = invSnap.val(); // Don't default to {} yet, we need to check if null
     const realized = realSnap.val() || {};
     const inceptionCache = cacheSnap.val() || {};
 
-    if (Object.keys(investments).length === 0) {
-        console.log("No investments.");
-        process.exit(0);
+    // --- START: FIX FOR EMPTY PORTFOLIO ---
+    if (!investments) {
+        console.log("No investments found. Resetting benchmark to 0.");
+        
+        // Wipe the benchmark cache because we have $0 invested (cannot calc %)
+        await db.ref('benchmarkCache').set({
+            current: { our: 0, spy: 0 },
+            allTime: { our: 0, spy: 0 }
+        });
+        
+        // Optional: Clear price cache to keep DB clean
+        await db.ref('priceCache').set({});
+        
+        return admin.app().delete();
     }
+    // --- END: FIX FOR EMPTY PORTFOLIO ---
     
-    // 3. Update Live Prices (Finnhub)
+    // 2. Update Live Prices (Finnhub)
     const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
     if (!symbols.includes('SPY')) symbols.push('SPY');
@@ -51,7 +62,7 @@ async function main() {
     await db.ref('priceCache').set(priceCache);
     console.log("Updated prices.");
 
-    // 4. Calculate Portfolio Totals
+    // 3. Calculate Portfolio Totals
     let totalInvested = 0, currentVal = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
@@ -62,12 +73,10 @@ async function main() {
     const currentUnrealizedPL = currentVal - totalInvested;
     const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
 
-    // 5. Benchmark Calculations
-    // A. Current Strategy (Since Oct 5)
+    // 4. Benchmark Calculations
     const currentStartKey = "05-10-2025";
     const spyCurrentStart = inceptionCache[currentStartKey] || 0;
     
-    // B. All Time (Since July 14)
     const allTimeStartKey = "14-07-2025";
     const spyAllTimeStart = inceptionCache[allTimeStartKey] || 0;
     
@@ -78,15 +87,12 @@ async function main() {
         allTime: { our: 0, spy: 0 }
     };
 
-    // Calculate Current
     if (totalInvested > 0 && spyCurrentStart > 0 && spyCurrentPrice > 0) {
         benchmarkCache.current.our = (currentUnrealizedPL / totalInvested) * 100;
         benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStart) / spyCurrentStart) * 100;
     }
 
-    // Calculate All Time
     if (totalInvested > 0 && spyAllTimeStart > 0 && spyCurrentPrice > 0) {
-        // For All Time Return, we use (Total P/L / Current Invested) as a simple approximation for the dashboard
         benchmarkCache.allTime.our = (allTimeTotalPL / totalInvested) * 100;
         benchmarkCache.allTime.spy = ((spyCurrentPrice - spyAllTimeStart) / spyAllTimeStart) * 100;
     }
