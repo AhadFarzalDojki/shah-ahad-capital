@@ -13,7 +13,7 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 };
 
 const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
-    // FIX: Robust date parsing for "DD-MM-YYYY" or "DD/MM/YYYY"
+    // Robust date parsing
     const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
     const day = parts[0];
     const month = parts[1];
@@ -94,13 +94,13 @@ async function main() {
 
     // 4. Benchmark Calculations
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
-    const TOTAL_CAPITAL = 172.00;
+    const TOTAL_CAPITAL = 172.00; // Updated Capital
     
-    // Use hyphenated keys for Firebase compatibility
+    // Dates
     const currentStartKey = "05-10-2025"; 
-    const allTimeStartKey = "19-08-2025"; 
+    const allTimeStartKey = "19-08-2025"; // Updated Start Date
 
-    // Check Cache / Fetch if missing
+    // Fetch/Check Cache
     let spyCurrentStart = inceptionCache[currentStartKey] || 0;
     let spyAllTimeStart = inceptionCache[allTimeStartKey] || 0;
 
@@ -124,7 +124,7 @@ async function main() {
         benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStart) / spyCurrentStart) * 100;
     }
 
-    // B. All Time (using Total Capital)
+    // B. All Time
     if (spyAllTimeStart > 0 && spyCurrentPrice > 0) {
         benchmarkCache.allTime.our = (allTimeTotalPL / TOTAL_CAPITAL) * 100;
         benchmarkCache.allTime.spy = ((spyCurrentPrice - spyAllTimeStart) / spyAllTimeStart) * 100;
