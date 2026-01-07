@@ -15,15 +15,6 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
     let targetDate = new Date(dateStr.split('/').reverse().join('-'));
     for (let i = 0; i < 7; i++) {
-        const to = Math.floor(targetDate.getTime() / 1000);
-        const from = to - 86400; // 24 hours before
-        // Try Finnhub Historical First (Fast)
-        try {
-           // Note: Finnhub free historical might be limited, but worth a try. 
-           // If fails, we fall back to logic or rely on manual cache.
-        } catch(e) {}
-        
-        // Use Alpha Vantage for Historical (Reliable but slow)
         const formattedDate = targetDate.toISOString().split('T')[0];
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
         try {
@@ -51,7 +42,7 @@ async function main() {
     });
     const db = admin.database();
 
-    // 1. Fetch ALL Data (Investments + Realized)
+    // 1. Fetch ALL Data
     const [investmentsSnap, realizedSnap] = await Promise.all([
         db.ref('investments').once('value'),
         db.ref('realized').once('value')
@@ -83,11 +74,11 @@ async function main() {
     const currentUnrealizedPL = currentVal - totalInvested;
     const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
 
-    // 4. Handle Benchmark Dates (Current & Fixed)
+    // 4. Handle Benchmark Dates
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const inceptionCache = (await db.ref('inceptionCache').once('value')).val() || {};
     
-    // Date A: Current Strategy Inception (Dynamic - based on oldest active stock)
+    // Date A: Current Strategy Inception
     const currentStartDateObj = new Date(Math.min(...Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-')))));
     const currentStartDate = currentStartDateObj.toLocaleDateString('en-GB');
     
@@ -95,9 +86,10 @@ async function main() {
     const fixedStartDate = "14/07/2025"; 
 
     // Fetch/Cache Start Prices
-    let spyCurrentStartPrice = inceptionCache[currentStartDate] || 0;
-    let spyFixedStartPrice = inceptionCache["FIXED_" + fixedStartDate] || 0;
+    let spyCurrentStartPrice = inceptionCache[currentStartDate.replace(/\//g, '-')] || 0;
+    let spyFixedStartPrice = inceptionCache["FIXED_" + fixedStartDate.replace(/\//g, '-')] || 0;
 
+    // If missing from cache, fetch from API
     if (spyCurrentStartPrice === 0) {
         console.log(`Fetching SPY price for current start: ${currentStartDate}`);
         spyCurrentStartPrice = await fetchHistoricalPrice('SPY', currentStartDate, alphaApiKey);
@@ -117,14 +109,13 @@ async function main() {
         allTime: { our: 0, spy: 0 }
     };
 
-    // Current Strategy Return
     if (totalInvested > 0 && spyCurrentStartPrice > 0) {
         benchmarkCache.current.our = (currentUnrealizedPL / totalInvested) * 100;
         benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStartPrice) / spyCurrentStartPrice) * 100;
     }
 
-    // All Time Return (Total P/L / Total Invested)
     if (totalInvested > 0 && spyFixedStartPrice > 0) {
+        // Approximate 'all time invested' as current invested for simplicity of percentage calc
         benchmarkCache.allTime.our = (allTimeTotalPL / totalInvested) * 100;
         benchmarkCache.allTime.spy = ((spyCurrentPrice - spyFixedStartPrice) / spyFixedStartPrice) * 100;
     }
