@@ -1,20 +1,29 @@
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
-// 1. Fetch Live Prices (Finnhub - Fast)
+// --- Helper Functions ---
 const fetchFinnhubPrice = async (symbol, apiKey) => {
+  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`);
-    if (!res.ok) return 0;
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`Finnhub quote API error for ${symbol}: ${res.status}`); return 0; }
     const data = await res.json();
     return data.c || 0;
-  } catch (e) { return 0; }
+  } catch (e) { console.error(`Failed to fetch ${symbol} from Finnhub`, e); return 0; }
 };
 
-// 2. Fetch Historical Price (Alpha Vantage - Slow, Limited)
 const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
     let targetDate = new Date(dateStr.split('/').reverse().join('-'));
     for (let i = 0; i < 7; i++) {
+        const to = Math.floor(targetDate.getTime() / 1000);
+        const from = to - 86400; // 24 hours before
+        // Try Finnhub Historical First (Fast)
+        try {
+           // Note: Finnhub free historical might be limited, but worth a try. 
+           // If fails, we fall back to logic or rely on manual cache.
+        } catch(e) {}
+        
+        // Use Alpha Vantage for Historical (Reliable but slow)
         const formattedDate = targetDate.toISOString().split('T')[0];
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
         try {
@@ -22,6 +31,7 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
             if (r.ok) {
                 const d = await r.json();
                 if (d?.["Time Series (Daily)"]?.[formattedDate]) {
+                    console.log(`Found historical price for ${symbol} on ${formattedDate}`);
                     return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
                 }
             }
@@ -31,61 +41,104 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
     return 0;
 };
 
+// --- Main Execution ---
 async function main() {
   try {
     const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount), databaseURL: process.env.DATABASE_URL });
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: process.env.DATABASE_URL
+    });
     const db = admin.database();
 
-    const investments = (await db.ref('investments').once('value')).val();
-    if (!investments) return process.exit(0);
+    // 1. Fetch ALL Data (Investments + Realized)
+    const [investmentsSnap, realizedSnap] = await Promise.all([
+        db.ref('investments').once('value'),
+        db.ref('realized').once('value')
+    ]);
+    const investments = investmentsSnap.val() || {};
+    const realized = realizedSnap.val() || {};
     
-    // A. Update Prices
-    const finnhubKey = process.env.FINNHUB_API_KEY;
+    if (Object.keys(investments).length === 0) { console.log("No active investments."); return admin.app().delete(); }
+    
+    const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
     if (!symbols.includes('SPY')) symbols.push('SPY');
     
+    // 2. Update Live Prices
     const priceCache = {};
     await Promise.all(symbols.map(async (symbol) => {
-        const price = await fetchFinnhubPrice(symbol, finnhubKey);
-        if (price > 0) priceCache[symbol] = price;
+        priceCache[symbol] = await fetchFinnhubPrice(symbol, finnhubApiKey);
     }));
     await db.ref('priceCache').set(priceCache);
-    console.log("Updated prices.");
+    console.log("Updated price cache.");
 
-    // B. Update Benchmark (With Smart Cache)
-    let totalInvested = 0, totalValue = 0;
+    // 3. Calculate Totals
+    let totalInvested = 0, currentVal = 0;
     Object.values(investments).forEach(inv => {
         totalInvested += inv.shares * inv.price;
-        totalValue += inv.shares * (priceCache[inv.symbol] || 0);
+        currentVal += inv.shares * (priceCache[inv.symbol] || 0);
     });
+    const totalRealizedPL = Object.values(realized).reduce((sum, trade) => sum + (trade.pl || 0), 0);
+    const currentUnrealizedPL = currentVal - totalInvested;
+    const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
 
-    const earliestDateStr = Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-'))).reduce((a, b) => a < b ? a : b).toLocaleDateString('en-GB');
-    
-    // CHECK FIREBASE CACHE FIRST
+    // 4. Handle Benchmark Dates (Current & Fixed)
+    const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const inceptionCache = (await db.ref('inceptionCache').once('value')).val() || {};
-    let spyStartPrice = 0;
+    
+    // Date A: Current Strategy Inception (Dynamic - based on oldest active stock)
+    const currentStartDateObj = new Date(Math.min(...Object.values(investments).map(inv => new Date(inv.date.split('/').reverse().join('-')))));
+    const currentStartDate = currentStartDateObj.toLocaleDateString('en-GB');
+    
+    // Date B: All Time Start (Fixed)
+    const fixedStartDate = "14/07/2025"; 
 
-    if (inceptionCache.date === earliestDateStr && inceptionCache.price > 0) {
-        console.log("Using cached inception price.");
-        spyStartPrice = inceptionCache.price;
-    } else {
-        console.log("Fetching new historical price...");
-        spyStartPrice = await fetchHistoricalPrice('SPY', earliestDateStr, process.env.ALPHA_VANTAGE_KEY);
-        if (spyStartPrice > 0) {
-            await db.ref('inceptionCache').set({ date: earliestDateStr, price: spyStartPrice });
-        }
+    // Fetch/Cache Start Prices
+    let spyCurrentStartPrice = inceptionCache[currentStartDate] || 0;
+    let spyFixedStartPrice = inceptionCache["FIXED_" + fixedStartDate] || 0;
+
+    if (spyCurrentStartPrice === 0) {
+        console.log(`Fetching SPY price for current start: ${currentStartDate}`);
+        spyCurrentStartPrice = await fetchHistoricalPrice('SPY', currentStartDate, alphaApiKey);
+        if (spyCurrentStartPrice > 0) await db.ref(`inceptionCache/${currentStartDate.replace(/\//g, '-')}`).set(spyCurrentStartPrice);
+    }
+
+    if (spyFixedStartPrice === 0) {
+        console.log(`Fetching SPY price for fixed start: ${fixedStartDate}`);
+        spyFixedStartPrice = await fetchHistoricalPrice('SPY', fixedStartDate, alphaApiKey);
+        if (spyFixedStartPrice > 0) await db.ref(`inceptionCache/FIXED_${fixedStartDate.replace(/\//g, '-')}`).set(spyFixedStartPrice);
     }
     
-    const benchmarkCache = { ourReturn: 0, spyReturn: 0 };
-    if (totalInvested > 0 && spyStartPrice > 0) {
-        benchmarkCache.ourReturn = ((totalValue - totalInvested) / totalInvested) * 100;
-        benchmarkCache.spyReturn = (( (priceCache['SPY']||0) - spyStartPrice) / spyStartPrice) * 100;
+    // 5. Calculate Benchmark Returns
+    const spyCurrentPrice = priceCache['SPY'] || 0;
+    const benchmarkCache = { 
+        current: { our: 0, spy: 0 },
+        allTime: { our: 0, spy: 0 }
+    };
+
+    // Current Strategy Return
+    if (totalInvested > 0 && spyCurrentStartPrice > 0) {
+        benchmarkCache.current.our = (currentUnrealizedPL / totalInvested) * 100;
+        benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStartPrice) / spyCurrentStartPrice) * 100;
     }
+
+    // All Time Return (Total P/L / Total Invested)
+    if (totalInvested > 0 && spyFixedStartPrice > 0) {
+        benchmarkCache.allTime.our = (allTimeTotalPL / totalInvested) * 100;
+        benchmarkCache.allTime.spy = ((spyCurrentPrice - spyFixedStartPrice) / spyFixedStartPrice) * 100;
+    }
+
     await db.ref('benchmarkCache').set(benchmarkCache);
-    
-    process.exit(0);
-  } catch (e) { console.error(e); process.exit(1); }
+    console.log("Updated benchmark cache:", benchmarkCache);
+
+    return admin.app().delete();
+
+  } catch (e) {
+    console.error("FATAL ERROR:", e);
+    if (admin.apps.length) admin.app().delete();
+    process.exit(1);
+  }
 }
 
 main();
