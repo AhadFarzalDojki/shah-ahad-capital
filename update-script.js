@@ -13,7 +13,14 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 };
 
 const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
-    let targetDate = new Date(dateStr.split('/').reverse().join('-'));
+    // FIX: Robust date parsing for "DD-MM-YYYY" or "DD/MM/YYYY"
+    const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
+    const day = parts[0];
+    const month = parts[1];
+    const year = parts[2];
+    
+    let targetDate = new Date(`${year}-${month}-${day}`);
+    
     for (let i = 0; i < 7; i++) {
         const formattedDate = targetDate.toISOString().split('T')[0];
         const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
@@ -65,7 +72,6 @@ async function main() {
         }));
         await db.ref('priceCache').set(priceCache);
     } else {
-        // Even if no investments, get SPY for benchmark
         const spyPrice = await fetchFinnhubPrice('SPY', finnhubApiKey);
         if (spyPrice > 0) {
             priceCache['SPY'] = spyPrice;
@@ -87,13 +93,12 @@ async function main() {
     const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
 
     // 4. Benchmark Calculations
-    
-    // --- UPDATED CONFIG ---
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
-    const TOTAL_CAPITAL = 172.00; // $168 initial + $4 top-up
-    const currentStartKey = "05-10-2025";
-    const allTimeStartKey = "19-08-2025"; // New correct date
-    // ----------------------
+    const TOTAL_CAPITAL = 172.00;
+    
+    // Use hyphenated keys for Firebase compatibility
+    const currentStartKey = "05-10-2025"; 
+    const allTimeStartKey = "19-08-2025"; 
 
     // Check Cache / Fetch if missing
     let spyCurrentStart = inceptionCache[currentStartKey] || 0;
