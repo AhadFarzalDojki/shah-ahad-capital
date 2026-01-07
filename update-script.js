@@ -29,7 +29,6 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
             if (r.ok) {
                 const d = await r.json();
                 if (d?.["Time Series (Daily)"]?.[formattedDate]) {
-                    console.log(`Found historical price for ${symbol} on ${formattedDate}`);
                     return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
                 }
             }
@@ -55,38 +54,29 @@ async function main() {
         db.ref('inceptionCache').once('value')
     ]);
 
-    const investments = invSnap.val(); 
+    const investments = invSnap.val() || {}; // Use empty object if null
     const realized = realSnap.val() || {};
     const inceptionCache = cacheSnap.val() || {};
     
     // 2. Update Live Prices
+    // If we have no stocks, we MUST still fetch SPY for the benchmark
     const finnhubApiKey = process.env.FINNHUB_API_KEY;
-    const priceCache = {};
+    const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
+    if (!symbols.includes('SPY')) symbols.push('SPY');
     
-    if (investments) {
-        const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
-        if (!symbols.includes('SPY')) symbols.push('SPY');
-        await Promise.all(symbols.map(async (symbol) => {
-            const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
-            if(p > 0) priceCache[symbol] = p;
-        }));
-        await db.ref('priceCache').set(priceCache);
-    } else {
-        const spyPrice = await fetchFinnhubPrice('SPY', finnhubApiKey);
-        if (spyPrice > 0) {
-            priceCache['SPY'] = spyPrice;
-            await db.ref('priceCache').set(priceCache);
-        }
-    }
-
+    const priceCache = {};
+    await Promise.all(symbols.map(async (symbol) => {
+        const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
+        if(p > 0) priceCache[symbol] = p;
+    }));
+    await db.ref('priceCache').set(priceCache);
+    
     // 3. Calculate Totals
     let currentInvested = 0, currentVal = 0;
-    if (investments) {
-        Object.values(investments).forEach(inv => {
-            currentInvested += inv.shares * inv.price;
-            currentVal += inv.shares * (priceCache[inv.symbol] || 0);
-        });
-    }
+    Object.values(investments).forEach(inv => {
+        currentInvested += inv.shares * inv.price;
+        currentVal += inv.shares * (priceCache[inv.symbol] || 0);
+    });
     
     const totalRealizedPL = Object.values(realized).reduce((sum, trade) => sum + (trade.pl || 0), 0);
     const currentUnrealizedPL = currentVal - currentInvested;
@@ -94,23 +84,21 @@ async function main() {
 
     // 4. Benchmark Calculations
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
-    const TOTAL_CAPITAL = 172.00; // Updated Capital
+    const TOTAL_CAPITAL = 172.00; // Fixed Base Capital
     
-    // Dates
     const currentStartKey = "05-10-2025"; 
-    const allTimeStartKey = "19-08-2025"; // Updated Start Date
+    const allTimeStartKey = "19-08-2025"; 
 
     // Fetch/Check Cache
     let spyCurrentStart = inceptionCache[currentStartKey] || 0;
     let spyAllTimeStart = inceptionCache[allTimeStartKey] || 0;
 
+    // Only fetch if missing (saving API calls)
     if (spyCurrentStart === 0) {
-        console.log("Fetching Q4 start price...");
         spyCurrentStart = await fetchHistoricalPrice('SPY', currentStartKey, alphaApiKey);
         if (spyCurrentStart > 0) await db.ref(`inceptionCache/${currentStartKey}`).set(spyCurrentStart);
     }
     if (spyAllTimeStart === 0) {
-        console.log("Fetching All Time start price...");
         spyAllTimeStart = await fetchHistoricalPrice('SPY', allTimeStartKey, alphaApiKey);
         if (spyAllTimeStart > 0) await db.ref(`inceptionCache/${allTimeStartKey}`).set(spyAllTimeStart);
     }
@@ -124,7 +112,7 @@ async function main() {
         benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStart) / spyCurrentStart) * 100;
     }
 
-    // B. All Time
+    // B. All Time (Always runs now)
     if (spyAllTimeStart > 0 && spyCurrentPrice > 0) {
         benchmarkCache.allTime.our = (allTimeTotalPL / TOTAL_CAPITAL) * 100;
         benchmarkCache.allTime.spy = ((spyCurrentPrice - spyAllTimeStart) / spyAllTimeStart) * 100;
