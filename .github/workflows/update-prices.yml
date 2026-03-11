@@ -1,17 +1,20 @@
 name: Update Firebase Stock Prices
+
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+
 jobs:
   update-prices:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with: { node-version: '18' }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - run: npm install firebase-admin node-fetch@2
-      - name: Run script
+      - name: Run update script
         env:
           FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
