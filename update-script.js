@@ -84,7 +84,7 @@ async function main() {
     let currentInvested = 0, currentVal = 0;
     if (investments) {
         Object.values(investments).forEach(inv => {
-            currentInvested += inv.shares * inv.price;
+            currentInvested += inv.shares * (inv.price || inv.buyPrice);
             currentVal += inv.shares * (priceCache[inv.symbol] || 0);
         });
     }
