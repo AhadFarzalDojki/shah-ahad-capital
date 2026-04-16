@@ -103,7 +103,10 @@ async function main() {
     if (investments) {
         // Find the earliest date among current holdings automatically
         const dates = Object.values(investments).map(i => {
-             const parts = i.date.includes('/') ? i.date.split('/') : i.date.split('-');
+             const dates = Object.values(investments).map(i => {
+    const dateStr = i.date || i.buyDate;  // handle both field names
+    if (!dateStr) return new Date();      // fallback to today if missing
+    const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
              return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
         });
         const minDate = new Date(Math.min(...dates));
