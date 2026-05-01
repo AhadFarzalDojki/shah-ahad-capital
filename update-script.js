@@ -67,10 +67,17 @@ async function main() {
         const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
         if (!symbols.includes('SPY')) symbols.push('SPY');
         
-        await Promise.all(symbols.map(async (symbol) => {
-            const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
-            if(p > 0) priceCache[symbol] = p;
-        }));
+        const BATCH_SIZE = 10;
+for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+    const batch = symbols.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async (symbol) => {
+        const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
+        if (p > 0) priceCache[symbol] = p;
+    }));
+    if (i + BATCH_SIZE < symbols.length) {
+        await new Promise(r => setTimeout(r, 1000)); // 1s between batches
+    }
+}
         await db.ref('priceCache').set(priceCache);
     } else {
         const spyPrice = await fetchFinnhubPrice('SPY', finnhubApiKey);
