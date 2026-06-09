@@ -13,7 +13,6 @@ const fetchFinnhubPrice = async (symbol, apiKey) => {
 };
 
 const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
-    // Robust date parsing
     const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
     const day = parts[0];
     const month = parts[1];
@@ -42,8 +41,6 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
 async function main() {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
-console.log("Raw length:", raw.length, "First 50 chars:", raw.substring(0, 50));
-const serviceAccount = JSON.parse(raw);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL: process.env.DATABASE_URL
@@ -70,16 +67,16 @@ const serviceAccount = JSON.parse(raw);
         if (!symbols.includes('SPY')) symbols.push('SPY');
         
         const BATCH_SIZE = 10;
-for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-    const batch = symbols.slice(i, i + BATCH_SIZE);
-    await Promise.all(batch.map(async (symbol) => {
-        const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
-        if (p > 0) priceCache[symbol] = p;
-    }));
-    if (i + BATCH_SIZE < symbols.length) {
-        await new Promise(r => setTimeout(r, 1000)); // 1s between batches
-    }
-}
+        for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+            const batch = symbols.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (symbol) => {
+                const p = await fetchFinnhubPrice(symbol, finnhubApiKey);
+                if (p > 0) priceCache[symbol] = p;
+            }));
+            if (i + BATCH_SIZE < symbols.length) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
         await db.ref('priceCache').set(priceCache);
     } else {
         const spyPrice = await fetchFinnhubPrice('SPY', finnhubApiKey);
@@ -105,12 +102,11 @@ for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
     // 4. Benchmark Calculations
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const TOTAL_CAPITAL = 172.00;
-    const allTimeStartKey = "19-08-2025"; // Fixed All-Time Start
+    const allTimeStartKey = "19-08-2025";
 
     // --- DYNAMIC CURRENT START DATE ---
     let currentStartKey = null;
     if (investments) {
-        // Find the earliest date among current holdings automatically
         const dates = Object.values(investments).map(i => {
             const dateStr = i.date || i.buyDate;
             if (!dateStr) return new Date();
@@ -118,7 +114,6 @@ for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
             return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
         });
         const minDate = new Date(Math.min(...dates));
-        // Format to DD-MM-YYYY for cache key
         const d = String(minDate.getDate()).padStart(2, '0');
         const m = String(minDate.getMonth() + 1).padStart(2, '0');
         const y = minDate.getFullYear();
