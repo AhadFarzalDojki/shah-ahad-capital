@@ -36,9 +36,8 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
 
 async function main() {
   try {
-    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+      credential: admin.credential.refreshToken(process.env.FIREBASE_DATABASE_SECRET),
       databaseURL: process.env.DATABASE_URL
     });
     const db = admin.database();
