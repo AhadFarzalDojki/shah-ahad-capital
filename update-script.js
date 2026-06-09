@@ -1,8 +1,10 @@
-const admin = require('firebase-admin');
+node -e "
+const fs = require('fs');
+const content = \`const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
 const fetchFinnhubPrice = async (symbol, apiKey) => {
-  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
+  const url = \\\`https://finnhub.io/api/v1/quote?symbol=\\\${symbol}&token=\\\${apiKey}\\\`;
   try {
     const res = await fetch(url);
     if (!res.ok) return 0;
@@ -16,16 +18,16 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
     const day = parts[0];
     const month = parts[1];
     const year = parts[2];
-    let targetDate = new Date(`${year}-${month}-${day}`);
+    let targetDate = new Date(\\\`\\\${year}-\\\${month}-\\\${day}\\\`);
     for (let i = 0; i < 7; i++) {
         const formattedDate = targetDate.toISOString().split('T')[0];
-        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
+        const url = \\\`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=\\\${symbol}&apikey=\\\${apiKey}\\\`;
         try {
             const r = await fetch(url);
             if (r.ok) {
                 const d = await r.json();
-                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
-                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
+                if (d?.['Time Series (Daily)']?.[formattedDate]) {
+                    return parseFloat(d['Time Series (Daily)'][formattedDate]['4. close']);
                 }
             }
         } catch (error) { console.error(error); }
@@ -42,20 +44,16 @@ async function main() {
         databaseURL: process.env.DATABASE_URL
     });
     const db = admin.database();
-
     const [invSnap, realSnap, cacheSnap] = await Promise.all([
         db.ref('investments').once('value'),
         db.ref('realized').once('value'),
         db.ref('inceptionCache').once('value')
     ]);
-
     const investments = invSnap.val();
     const realized = realSnap.val() || {};
     const inceptionCache = cacheSnap.val() || {};
-
     const finnhubApiKey = process.env.FINNHUB_API_KEY;
     const priceCache = {};
-
     if (investments) {
         const symbols = [...new Set(Object.values(investments).map(inv => inv.symbol))];
         if (!symbols.includes('SPY')) symbols.push('SPY');
@@ -78,7 +76,6 @@ async function main() {
             await db.ref('priceCache').set(priceCache);
         }
     }
-
     let currentInvested = 0, currentVal = 0;
     if (investments) {
         Object.values(investments).forEach(inv => {
@@ -86,67 +83,61 @@ async function main() {
             currentVal += inv.shares * (priceCache[inv.symbol] || 0);
         });
     }
-
     const totalRealizedPL = Object.values(realized).reduce((sum, trade) => sum + (trade.pl || 0), 0);
     const currentUnrealizedPL = currentVal - currentInvested;
     const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
-
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const TOTAL_CAPITAL = 172.00;
-    const allTimeStartKey = "19-08-2025";
-
+    const allTimeStartKey = '19-08-2025';
     let currentStartKey = null;
     if (investments) {
         const dates = Object.values(investments).map(i => {
             const dateStr = i.date || i.buyDate;
             if (!dateStr) return new Date();
             const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
-            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            return new Date(\\\`\\\${parts[2]}-\\\${parts[1]}-\\\${parts[0]}\\\`);
         });
         const minDate = new Date(Math.min(...dates));
         const d = String(minDate.getDate()).padStart(2, '0');
         const m = String(minDate.getMonth() + 1).padStart(2, '0');
         const y = minDate.getFullYear();
-        currentStartKey = `${d}-${m}-${y}`;
-        console.log(`Detected Current Strategy Start Date: ${currentStartKey}`);
+        currentStartKey = \\\`\\\${d}-\\\${m}-\\\${y}\\\`;
+        console.log(\\\`Detected Current Strategy Start Date: \\\${currentStartKey}\\\`);
     }
-
     let spyCurrentStart = 0;
     let spyAllTimeStart = inceptionCache[allTimeStartKey] || 0;
-
     if (currentStartKey) {
         spyCurrentStart = inceptionCache[currentStartKey] || 0;
         if (spyCurrentStart === 0) {
             spyCurrentStart = await fetchHistoricalPrice('SPY', currentStartKey, alphaApiKey);
-            if (spyCurrentStart > 0) await db.ref(`inceptionCache/${currentStartKey}`).set(spyCurrentStart);
+            if (spyCurrentStart > 0) await db.ref(\\\`inceptionCache/\\\${currentStartKey}\\\`).set(spyCurrentStart);
         }
     }
-
     if (spyAllTimeStart === 0) {
         spyAllTimeStart = await fetchHistoricalPrice('SPY', allTimeStartKey, alphaApiKey);
-        if (spyAllTimeStart > 0) await db.ref(`inceptionCache/${allTimeStartKey}`).set(spyAllTimeStart);
+        if (spyAllTimeStart > 0) await db.ref(\\\`inceptionCache/\\\${allTimeStartKey}\\\`).set(spyAllTimeStart);
     }
-
     const spyCurrentPrice = priceCache['SPY'] || 0;
     const benchmarkCache = { current: { our: 0, spy: 0 }, allTime: { our: 0, spy: 0 } };
-
     if (currentInvested > 0 && spyCurrentStart > 0 && spyCurrentPrice > 0) {
         benchmarkCache.current.our = (currentUnrealizedPL / currentInvested) * 100;
         benchmarkCache.current.spy = ((spyCurrentPrice - spyCurrentStart) / spyCurrentStart) * 100;
     }
-
     if (spyAllTimeStart > 0 && spyCurrentPrice > 0) {
         benchmarkCache.allTime.our = (allTimeTotalPL / TOTAL_CAPITAL) * 100;
         benchmarkCache.allTime.spy = ((spyCurrentPrice - spyAllTimeStart) / spyAllTimeStart) * 100;
     }
-
     await db.ref('benchmarkCache').set(benchmarkCache);
-    console.log("Updated benchmarks:", benchmarkCache);
+    console.log('Updated benchmarks:', benchmarkCache);
     process.exit(0);
   } catch (e) {
-    console.error("FATAL ERROR:", e);
+    console.error('FATAL ERROR:', e);
     process.exit(1);
   }
 }
 
 main();
+\`;
+fs.writeFileSync('/tmp/update-script.js', content);
+console.log('Written', content.length, 'chars');
+"
