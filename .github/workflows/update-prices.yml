@@ -14,8 +14,8 @@ jobs:
       - run: npm install firebase-admin node-fetch@2
       - name: Write service account
         env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: echo "$SA" > serviceaccount.json
+          SA: ${{ secrets.FIREBASE_SA_BASE64 }}
+        run: echo "$SA" | base64 -d > serviceaccount.json
       - name: Debug service account
         run: |
           echo "File size: $(wc -c < serviceaccount.json)"
