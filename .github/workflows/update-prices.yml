@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install firebase-admin node-fetch@2
+      - run: npm install firebase-admin@11.11.0 node-fetch@2
       - name: Write service account
         env:
           SA: ${{ secrets.FIREBASE_SA_BASE64 }}
