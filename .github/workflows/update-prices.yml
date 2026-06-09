@@ -15,22 +15,9 @@ jobs:
       - name: Write service account
         env:
           SA: ${{ secrets.FIREBASE_SA_BASE64 }}
-        run: |
-          echo "$SA" | base64 -d > /tmp/sa_raw.json
-          python3 -c "
-import json
-with open('/tmp/sa_raw.json') as f:
-    d = json.load(f)
-d['private_key'] = d['private_key'].replace('\\\\n', '\\n')
-with open('serviceaccount.json', 'w') as f:
-    json.dump(d, f)
-"
+        run: echo "$SA" | base64 -d | python3 -c "import json,sys; d=json.load(sys.stdin); d['private_key']=d['private_key'].replace('\\n','\n'); open('serviceaccount.json','w').write(json.dumps(d))"
       - name: Debug service account
-        run: |
-          echo "File size: $(wc -c < serviceaccount.json)"
-          echo "Is valid JSON: $(python3 -m json.tool serviceaccount.json > /dev/null 2>&1 && echo YES || echo NO)"
-          echo "Has cert key: $(python3 -c "import json; d=json.load(open('serviceaccount.json')); print('YES' if 'private_key' in d else 'NO')" 2>/dev/null || echo FAILED)"
-          echo "Key starts with: $(python3 -c "import json; d=json.load(open('serviceaccount.json')); print(d['private_key'][:40])" 2>/dev/null)"
+        run: python3 -c "import json; d=json.load(open('serviceaccount.json')); print('size ok, has key:', 'private_key' in d, 'newlines:', chr(10) in d['private_key'])"
       - name: Run update script
         env:
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
