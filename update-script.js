@@ -37,10 +37,10 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
 async function main() {
   try {
     admin.initializeApp({
-      credential: admin.credential.refreshToken(process.env.FIREBASE_DATABASE_SECRET),
-      databaseURL: process.env.DATABASE_URL
-    });
-    const db = admin.database();
+      admin.initializeApp({
+    databaseURL: process.env.DATABASE_URL,
+    databaseAuthVariableOverride: null
+});
 
     const [invSnap, realSnap, cacheSnap] = await Promise.all([
         db.ref('investments').once('value'),
