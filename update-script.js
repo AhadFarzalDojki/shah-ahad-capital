@@ -36,12 +36,12 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
 
 async function main() {
   try {
+    const serviceAccount = require('./serviceaccount.json');
     admin.initializeApp({
-        const serviceAccount = require('./serviceaccount.json');
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.DATABASE_URL
-});
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: process.env.DATABASE_URL
+    });
+    const db = admin.database();
 
     const [invSnap, realSnap, cacheSnap] = await Promise.all([
         db.ref('investments').once('value'),
