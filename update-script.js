@@ -38,11 +38,7 @@ async function main() {
   try {
     const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
     admin.initializeApp({
-      const raw = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
-const serviceAccount = JSON.parse(raw);
-console.log("Keys:", Object.keys(serviceAccount));
-console.log("Has private_key:", !!serviceAccount.private_key);
-console.log("private_key starts with:", serviceAccount.private_key?.substring(0, 30));
+      credential: admin.credential.cert(serviceAccount),
       databaseURL: process.env.DATABASE_URL
     });
     const db = admin.database();
