@@ -16,6 +16,11 @@ jobs:
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: echo "$SA" > serviceaccount.json
+      - name: Debug service account
+        run: |
+          echo "File size: $(wc -c < serviceaccount.json)"
+          echo "Is valid JSON: $(python3 -m json.tool serviceaccount.json > /dev/null 2>&1 && echo YES || echo NO)"
+          echo "Has cert key: $(python3 -c "import json; d=json.load(open('serviceaccount.json')); print('YES' if 'private_key' in d else 'NO')" 2>/dev/null || echo FAILED)"
       - name: Run update script
         env:
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
