@@ -16,9 +16,6 @@ jobs:
         env:
           SA: ${{ secrets.FIREBASE_SA_BASE64 }}
         run: echo "$SA" | base64 -d | python3 -c "import json,sys; d=json.load(sys.stdin); d['private_key']=d['private_key'].replace('\\n','\n'); open('serviceaccount.json','w').write(json.dumps(d))"
-      - name: Debug service account
-        run: python3 -c "import json; d=json.load(open('serviceaccount.json')); print('size ok, has key:', 'private_key' in d, 'newlines:', chr(10) in d['private_key'])"
-      - name: Run update script
         env:
           DATABASE_URL: "https://tracker-b57d5-default-rtdb.asia-southeast1.firebasedatabase.app"
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
