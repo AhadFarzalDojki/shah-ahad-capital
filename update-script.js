@@ -41,7 +41,9 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
 
 async function main() {
   try {
-    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
+    const raw = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || '', 'base64').toString('utf8');
+console.log("Raw length:", raw.length, "First 50 chars:", raw.substring(0, 50));
+const serviceAccount = JSON.parse(raw);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL: process.env.DATABASE_URL
