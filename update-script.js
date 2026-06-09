@@ -42,7 +42,7 @@ async function main() {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+      const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
       databaseURL: process.env.DATABASE_URL
     });
     const db = admin.database();
