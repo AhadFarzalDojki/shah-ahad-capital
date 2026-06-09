@@ -1,10 +1,8 @@
-node -e "
-const fs = require('fs');
-const content = \`const admin = require('firebase-admin');
+const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
 const fetchFinnhubPrice = async (symbol, apiKey) => {
-  const url = \\\`https://finnhub.io/api/v1/quote?symbol=\\\${symbol}&token=\\\${apiKey}\\\`;
+  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`;
   try {
     const res = await fetch(url);
     if (!res.ok) return 0;
@@ -18,16 +16,16 @@ const fetchHistoricalPrice = async (symbol, dateStr, apiKey) => {
     const day = parts[0];
     const month = parts[1];
     const year = parts[2];
-    let targetDate = new Date(\\\`\\\${year}-\\\${month}-\\\${day}\\\`);
+    let targetDate = new Date(`${year}-${month}-${day}`);
     for (let i = 0; i < 7; i++) {
         const formattedDate = targetDate.toISOString().split('T')[0];
-        const url = \\\`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=\\\${symbol}&apikey=\\\${apiKey}\\\`;
+        const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
         try {
             const r = await fetch(url);
             if (r.ok) {
                 const d = await r.json();
-                if (d?.['Time Series (Daily)']?.[formattedDate]) {
-                    return parseFloat(d['Time Series (Daily)'][formattedDate]['4. close']);
+                if (d?.["Time Series (Daily)"]?.[formattedDate]) {
+                    return parseFloat(d["Time Series (Daily)"][formattedDate]["4. close"]);
                 }
             }
         } catch (error) { console.error(error); }
@@ -88,21 +86,21 @@ async function main() {
     const allTimeTotalPL = totalRealizedPL + currentUnrealizedPL;
     const alphaApiKey = process.env.ALPHA_VANTAGE_KEY;
     const TOTAL_CAPITAL = 172.00;
-    const allTimeStartKey = '19-08-2025';
+    const allTimeStartKey = "19-08-2025";
     let currentStartKey = null;
     if (investments) {
         const dates = Object.values(investments).map(i => {
             const dateStr = i.date || i.buyDate;
             if (!dateStr) return new Date();
             const parts = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
-            return new Date(\\\`\\\${parts[2]}-\\\${parts[1]}-\\\${parts[0]}\\\`);
+            return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
         });
         const minDate = new Date(Math.min(...dates));
         const d = String(minDate.getDate()).padStart(2, '0');
         const m = String(minDate.getMonth() + 1).padStart(2, '0');
         const y = minDate.getFullYear();
-        currentStartKey = \\\`\\\${d}-\\\${m}-\\\${y}\\\`;
-        console.log(\\\`Detected Current Strategy Start Date: \\\${currentStartKey}\\\`);
+        currentStartKey = `${d}-${m}-${y}`;
+        console.log(`Detected Current Strategy Start Date: ${currentStartKey}`);
     }
     let spyCurrentStart = 0;
     let spyAllTimeStart = inceptionCache[allTimeStartKey] || 0;
@@ -110,12 +108,12 @@ async function main() {
         spyCurrentStart = inceptionCache[currentStartKey] || 0;
         if (spyCurrentStart === 0) {
             spyCurrentStart = await fetchHistoricalPrice('SPY', currentStartKey, alphaApiKey);
-            if (spyCurrentStart > 0) await db.ref(\\\`inceptionCache/\\\${currentStartKey}\\\`).set(spyCurrentStart);
+            if (spyCurrentStart > 0) await db.ref(`inceptionCache/${currentStartKey}`).set(spyCurrentStart);
         }
     }
     if (spyAllTimeStart === 0) {
         spyAllTimeStart = await fetchHistoricalPrice('SPY', allTimeStartKey, alphaApiKey);
-        if (spyAllTimeStart > 0) await db.ref(\\\`inceptionCache/\\\${allTimeStartKey}\\\`).set(spyAllTimeStart);
+        if (spyAllTimeStart > 0) await db.ref(`inceptionCache/${allTimeStartKey}`).set(spyAllTimeStart);
     }
     const spyCurrentPrice = priceCache['SPY'] || 0;
     const benchmarkCache = { current: { our: 0, spy: 0 }, allTime: { our: 0, spy: 0 } };
@@ -137,7 +135,3 @@ async function main() {
 }
 
 main();
-\`;
-fs.writeFileSync('/tmp/update-script.js', content);
-console.log('Written', content.length, 'chars');
-"
